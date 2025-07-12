@@ -14,7 +14,7 @@ const Notifications = ({ onTokenReceived }) => {
       const permission = await Notification.requestPermission();
       setNotificationStatus(permission);
       if (permission === "granted") {
-        const token = await requestFCMToken(); // <-- use the exported function
+        const token = await requestFCMToken();
         onTokenReceived(token);
         console.log("FCM Token:", token);
       } else {
@@ -77,20 +77,6 @@ const App = () => {
     }
   }, []);
 
-  useEffect(() => {
-    async function subscribe() {
-      const token = await requestFCMToken();
-      if (token) {
-        fetch("/api/subscribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ token, location: "Paris" })
-        });
-      }
-    }
-    subscribe();
-  }, []);
-
   const fetchData = async (query) => {
     setLoading(true);
     setError(null);
@@ -141,7 +127,7 @@ const App = () => {
   };
 
   const handleTokenReceived = (token) => {
-    fetch("YOUR_BACKEND_ENDPOINT/subscribe", {
+    fetch("/api/subscribe", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token, location: weatherData?.location?.name || "User Location" })
