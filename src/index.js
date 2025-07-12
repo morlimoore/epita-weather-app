@@ -11,11 +11,24 @@ root.render(
 
 const swPath = `${process.env.PUBLIC_URL}/serviceWorker.js`;
 
+// if ("serviceWorker" in navigator) {
+//   window.addEventListener("load", () => {
+//     navigator.serviceWorker
+//       .register(swPath)
+//       .then((reg) => console.log("SW registered:", reg))
+//       .catch((err) => console.error("SW registration failed:", err));
+//   });
+// }
+
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register(swPath)
-      .then((reg) => console.log("SW registered:", reg))
-      .catch((err) => console.error("SW registration failed:", err));
+      .register("/firebase-messaging-sw.js")
+      .then((registration) => {
+        console.log("Service Worker registered:", registration);
+      })
+      .catch((err) => {
+        console.error("Service Worker registration failed:", err);
+      });
   });
 }

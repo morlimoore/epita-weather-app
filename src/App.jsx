@@ -1,30 +1,108 @@
 import React, { useState, useEffect } from "react";
 import { fetchWeather } from "./api/fetchWeather";
+import { requestFCMToken } from "./firebase";
+
+const Notifications = ({ onTokenReceived }) => {
+  const [notificationStatus, setNotificationStatus] = useState("default");
+
+  useEffect(() => {
+    setNotificationStatus(Notification.permission);
+  }, []);
+
+  const requestNotificationPermission = async () => {
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationStatus(permission);
+      if (permission === "granted") {
+        const token = await requestFCMToken(); // <-- use the exported function
+        onTokenReceived(token);
+        console.log("FCM Token:", token);
+      } else {
+        console.log("Notification permission denied");
+      }
+    } catch (error) {
+      console.error("Error requesting notification permission:", error);
+      setNotificationStatus("denied");
+    }
+  };
+
+  return (
+    <div className="notifications">
+      <h3>Daily Weather Alerts</h3>
+      {notificationStatus === "granted" ? (
+        <p>Notifications enabled for daily weather updates.</p>
+      ) : (
+        <>
+          <p>Enable notifications to receive daily morning weather alerts.</p>
+          <button onClick={requestNotificationPermission} disabled={notificationStatus === "denied"}>
+            {notificationStatus === "denied" ? "Notifications Blocked" : "Enable Notifications"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+};
 
 const App = () => {
   const [weatherData, setWeatherData] = useState(null);
   const [cityName, setCityName] = useState("");
   const [error, setError] = useState(null);
-  const [isCelsius, setIsCelsius] = useState(null);
+  const [isCelsius, setIsCelsius] = useState(true);
   const [loading, setLoading] = useState(false);
   const [recentSearches, setRecentSearches] = useState([]);
 
   useEffect(() => {
-    const savedSearches =
-      JSON.parse(localStorage.getItem("recentSearches")) || [];
+    const savedSearches = JSON.parse(localStorage.getItem("recentSearches")) || [];
     setRecentSearches(savedSearches);
+
+    if (navigator.geolocation) {
+      setLoading(true);
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          const query = `${latitude},${longitude}`;
+          fetchData(query);
+        },
+        (geoError) => {
+          setLoading(false);
+          if (geoError.code === geoError.PERMISSION_DENIED) {
+            setError("Location access denied. Please enter a city name.");
+          } else {
+            setError("Unable to retrieve location. Please enter a city name.");
+          }
+        }
+      );
+    } else {
+      setError("Geolocation is not supported by your browser.");
+    }
   }, []);
 
-  const fetchData = async (city) => {
+  useEffect(() => {
+    async function subscribe() {
+      const token = await requestFCMToken();
+      if (token) {
+        fetch("/api/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token, location: "Paris" })
+        });
+      }
+    }
+    subscribe();
+  }, []);
+
+  const fetchData = async (query) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchWeather(city);
+      const data = await fetchWeather(query);
       setWeatherData(data);
       setCityName("");
-      updateRecentSearches(data.location.name);
+      if (!query.includes(",")) {
+        updateRecentSearches(data.location.name);
+      }
     } catch (error) {
-      setError("City not found. Please try again.");
+      setError("City not found or invalid location. Please try again.");
       setWeatherData(null);
     } finally {
       setLoading(false);
@@ -51,7 +129,7 @@ const App = () => {
     fetchData(city);
   };
 
-  const toggleTemperatureUnit = (city) => {
+  const toggleTemperatureUnit = () => {
     setIsCelsius(!isCelsius);
   };
 
@@ -60,6 +138,14 @@ const App = () => {
     return isCelsius
       ? `${weatherData.current.temp_c} °C`
       : `${weatherData.current.temp_f} °F`;
+  };
+
+  const handleTokenReceived = (token) => {
+    fetch("YOUR_BACKEND_ENDPOINT/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, location: weatherData?.location?.name || "User Location" })
+    }).catch((error) => console.error("Error sending token to backend:", error));
   };
 
   return (
@@ -87,6 +173,7 @@ const App = () => {
           </label>
           <span>°F</span>
         </div>
+        <Notifications onTokenReceived={handleTokenReceived} />
         {loading && <div className="loading">Loading...</div>}
         {error && <div className="error">{error}</div>}
         {weatherData && (
